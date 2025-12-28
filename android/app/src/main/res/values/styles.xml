@@ -1,0 +1,24 @@
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <!-- Launch Theme (قبل از اجرای Flutter) -->
+    <style name="LaunchTheme" parent="@android:style/Theme.Light.NoTitleBar">
+        <!-- پس‌زمینه‌ی صفحه‌ی اولیه -->
+        <item name="android:windowBackground">@color/launch_background</item>
+
+        <!-- Android 12+ splash -->
+        <item name="android:windowSplashScreenBackground">@color/launch_background</item>
+
+        <!-- این مهمه: آیکون وسط رو حذف می‌کنیم -->
+        <item name="android:windowSplashScreenAnimatedIcon">@null</item>
+
+        <!-- اگر دوست داری همون بکگراند بمونه -->
+        <item name="android:windowSplashScreenIconBackgroundColor">@null</item>
+
+        <!-- بعد از اسپلش -->
+        <item name="android:windowSplashScreenBrandingImage">@null</item>
+    </style>
+
+    <!-- Theme اصلی اپ -->
+    <style name="NormalTheme" parent="@android:style/Theme.Light.NoTitleBar">
+        <item name="android:windowBackground">@android:color/transparent</item>
+    </style>
+</resources>
