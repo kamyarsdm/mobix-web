@@ -74,7 +74,6 @@ class MobixCustomerApp extends StatelessWidget {
             side: const BorderSide(color: kBorder),
           ),
         ),
-
         inputDecorationTheme: InputDecorationTheme(
           filled: true,
           fillColor: kCard,
@@ -165,11 +164,10 @@ class _SplashPageState extends State<SplashPage> {
   }
 }
 
-/* ============================== Storage ============================== */
+/* ============================== Storage (Profile + Chat only) ============================== */
 
 class _Prefs {
   static const _kProfile = 'profile_json';
-  static const _kOrders = 'orders_json';
 
   // چت لوکال برای آف‌لاین (کلید per-order)
   static const _kChatPrefix = 'chat_json_';
@@ -190,20 +188,6 @@ class _Prefs {
     final raw = sp.getString(_kProfile);
     if (raw == null || raw.trim().isEmpty) return null;
     return Profile.fromJson(jsonDecode(raw) as Map<String, dynamic>);
-  }
-
-  static Future<List<OrderModel>> loadOrders() async {
-    final sp = await SharedPreferences.getInstance();
-    final raw = sp.getString(_kOrders);
-    if (raw == null || raw.trim().isEmpty) return [];
-    final list = (jsonDecode(raw) as List).cast<Map<String, dynamic>>();
-    return list.map(OrderModel.fromJson).toList();
-  }
-
-  static Future<void> saveOrders(List<OrderModel> orders) async {
-    final sp = await SharedPreferences.getInstance();
-    await sp.setString(
-        _kOrders, jsonEncode(orders.map((o) => o.toJson()).toList()));
   }
 
   static Future<List<ChatMessage>> loadChatFor(String orderNo) async {
@@ -253,96 +237,12 @@ class Profile {
   static Profile fromJson(Map<String, dynamic> j) => Profile(
     phone: j['phone'] as String,
     fullName: j['fullName'] as String,
-    acceptedTermsAtLeastOnce: (j['acceptedTermsAtLeastOnce'] as bool?) ??
-        false,
+    acceptedTermsAtLeastOnce:
+    (j['acceptedTermsAtLeastOnce'] as bool?) ?? false,
   );
 }
 
 enum DeliveryMethod { inPerson, courier }
-
-enum RepairStage {
-  received,
-  atShop,
-  diagnosing,
-  priceQuoted,
-  repairing,
-  ready,
-  delivered
-}
-
-enum PriceApproval { notNeeded, pending, approved, rejected }
-
-class OrderModel {
-  final String orderNo;
-
-  final String customerPhone;
-  final String customerName;
-
-  final String deviceModel;
-  final String issue;
-
-  final DateTime createdAt;
-
-  final DeliveryMethod deliveryMethod;
-  final String? pickupAddress;
-  final String? pickupTimeText;
-
-  final bool needsLoanerPhone;
-
-  final RepairStage stage;
-  final PriceApproval priceApproval;
-  final int quotedPriceToman;
-
-  const OrderModel({
-    required this.orderNo,
-    required this.customerPhone,
-    required this.customerName,
-    required this.deviceModel,
-    required this.issue,
-    required this.createdAt,
-    required this.deliveryMethod,
-    required this.pickupAddress,
-    required this.pickupTimeText,
-    required this.needsLoanerPhone,
-    required this.stage,
-    required this.priceApproval,
-    required this.quotedPriceToman,
-  });
-
-  Map<String, dynamic> toJson() => {
-    'orderNo': orderNo,
-    'customerPhone': customerPhone,
-    'customerName': customerName,
-    'deviceModel': deviceModel,
-    'issue': issue,
-    'createdAt': createdAt.toIso8601String(),
-    'deliveryMethod': deliveryMethod.index,
-    'pickupAddress': pickupAddress,
-    'pickupTimeText': pickupTimeText,
-    'needsLoanerPhone': needsLoanerPhone,
-    'stage': stage.index,
-    'priceApproval': priceApproval.index,
-    'quotedPriceToman': quotedPriceToman,
-  };
-
-  static OrderModel fromJson(Map<String, dynamic> j) => OrderModel(
-    orderNo: j['orderNo'] as String,
-    customerPhone: j['customerPhone'] as String,
-    customerName: j['customerName'] as String,
-    deviceModel: j['deviceModel'] as String,
-    issue: j['issue'] as String,
-    createdAt: DateTime.parse(j['createdAt'] as String),
-    deliveryMethod:
-    DeliveryMethod.values[(j['deliveryMethod'] as num).toInt()],
-    pickupAddress: j['pickupAddress'] as String?,
-    pickupTimeText: j['pickupTimeText'] as String?,
-    needsLoanerPhone: (j['needsLoanerPhone'] as bool?) ?? false,
-    stage: RepairStage.values[(j['stage'] as num).toInt()],
-    priceApproval:
-    PriceApproval.values[(j['priceApproval'] as num).toInt()],
-    quotedPriceToman: (j['quotedPriceToman'] as num?)?.toInt() ?? 0,
-  );
-}
 
 enum ChatRole { customer, mobix }
 
@@ -366,6 +266,100 @@ class ChatMessage {
   );
 }
 
+/// ====== Server Order Row (from v_orders_fa) ======
+class OrderDbRow {
+  final int id;
+  final String orderNo;
+  final String customerPhone;
+  final String customerName;
+
+  final String deviceModel;
+  final String issue;
+
+  final String deliveryMethod; // in_person | courier
+  final String? pickupAddress;
+  final String? pickupTimeText;
+  final bool needsLoanerPhone;
+
+  final String stage; // received | ...
+  final String stageFa; // فارسی
+  final int quotedPriceToman;
+  final String priceApproval; // pending | ...
+  final String priceApprovalFa; // فارسی
+
+  final DateTime createdAt;
+
+  const OrderDbRow({
+    required this.id,
+    required this.orderNo,
+    required this.customerPhone,
+    required this.customerName,
+    required this.deviceModel,
+    required this.issue,
+    required this.deliveryMethod,
+    required this.pickupAddress,
+    required this.pickupTimeText,
+    required this.needsLoanerPhone,
+    required this.stage,
+    required this.stageFa,
+    required this.quotedPriceToman,
+    required this.priceApproval,
+    required this.priceApprovalFa,
+    required this.createdAt,
+  });
+
+  static OrderDbRow fromJson(Map<String, dynamic> j) => OrderDbRow(
+    id: (j['id'] as num).toInt(),
+    orderNo: (j['order_no'] as String?) ?? '',
+    customerPhone: (j['customer_phone'] as String?) ?? '',
+    customerName: (j['customer_name'] as String?) ?? '',
+    deviceModel: (j['device_model'] as String?) ?? '',
+    issue: (j['issue'] as String?) ?? '',
+    deliveryMethod: (j['delivery_method'] as String?) ?? 'in_person',
+    pickupAddress: j['pickup_address'] as String?,
+    pickupTimeText: j['pickup_time_text'] as String?,
+    needsLoanerPhone: (j['needs_loaner_phone'] as bool?) ?? false,
+    stage: (j['stage'] as String?) ?? 'received',
+    stageFa: (j['stage_fa'] as String?) ??
+        _stageFaFromCode((j['stage'] as String?) ?? 'received'),
+    quotedPriceToman: (j['quoted_price_toman'] as num?)?.toInt() ?? 0,
+    priceApproval: (j['price_approval'] as String?) ?? 'not_needed',
+    priceApprovalFa: (j['price_approval_fa'] as String?) ??
+        _priceApprovalFaFromCode(
+            (j['price_approval'] as String?) ?? 'not_needed'),
+    createdAt: DateTime.parse(
+        (j['created_at'] as String?) ?? DateTime.now().toIso8601String())
+        .toLocal(),
+  );
+
+  OrderDbRow copyWith({
+    String? stage,
+    String? stageFa,
+    int? quotedPriceToman,
+    String? priceApproval,
+    String? priceApprovalFa,
+  }) {
+    return OrderDbRow(
+      id: id,
+      orderNo: orderNo,
+      customerPhone: customerPhone,
+      customerName: customerName,
+      deviceModel: deviceModel,
+      issue: issue,
+      deliveryMethod: deliveryMethod,
+      pickupAddress: pickupAddress,
+      pickupTimeText: pickupTimeText,
+      needsLoanerPhone: needsLoanerPhone,
+      stage: stage ?? this.stage,
+      stageFa: stageFa ?? this.stageFa,
+      quotedPriceToman: quotedPriceToman ?? this.quotedPriceToman,
+      priceApproval: priceApproval ?? this.priceApproval,
+      priceApprovalFa: priceApprovalFa ?? this.priceApprovalFa,
+      createdAt: createdAt,
+    );
+  }
+}
+
 /// پیام چت روی سرور
 class ChatMessageDb {
   final int id;
@@ -387,63 +381,82 @@ class ChatMessageDb {
     orderNo: (j['order_no'] as String?) ?? '',
     sender: (j['sender'] as String?) ?? 'customer',
     text: (j['text'] as String?) ?? '',
-    createdAt: DateTime.parse((j['created_at'] as String?) ??
-        DateTime.now().toIso8601String()),
+    createdAt: DateTime.parse(
+        (j['created_at'] as String?) ?? DateTime.now().toIso8601String())
+        .toLocal(),
   );
 
   ChatRole get role => sender == 'mobix' ? ChatRole.mobix : ChatRole.customer;
 }
 
-/// آپدیت وضعیت سفارش روی سرور
+/// آپدیت وضعیت سفارش روی سرور (schema جدید)
 class OrderUpdateDb {
   final int id;
+  final int orderId;
   final String orderNo;
-  final String stage;
+  final String stageCode; // received | price_quoted | price_approval:approved | ...
+  final String titleFa; // فارسی
   final String? note;
   final DateTime createdAt;
 
   const OrderUpdateDb({
     required this.id,
+    required this.orderId,
     required this.orderNo,
-    required this.stage,
+    required this.stageCode,
+    required this.titleFa,
     required this.note,
     required this.createdAt,
   });
 
   static OrderUpdateDb fromJson(Map<String, dynamic> j) => OrderUpdateDb(
     id: (j['id'] as num).toInt(),
+    orderId: (j['order_id'] as num).toInt(),
     orderNo: (j['order_no'] as String?) ?? '',
-    stage: (j['stage'] as String?) ?? '',
+    stageCode: (j['stage_code'] as String?) ?? '',
+    titleFa: (j['title_fa_final'] as String?) ??
+        (j['title_fa'] as String?) ??
+        '',
     note: j['note'] as String?,
-    createdAt: DateTime.parse((j['created_at'] as String?) ??
-        DateTime.now().toIso8601String()),
+    createdAt: DateTime.parse(
+        (j['created_at'] as String?) ?? DateTime.now().toIso8601String())
+        .toLocal(),
   );
 }
 
-/* ============================== Supabase mapping / insert ============================== */
+/* ============================== Supabase insert order (schema جدید) ============================== */
 
-Map<String, dynamic> _orderToDb(OrderModel o) {
+Map<String, dynamic> _orderToDb({
+  required String orderNo,
+  required Profile profile,
+  required String deviceModel,
+  required String issue,
+  required DeliveryMethod deliveryMethod,
+  required String? pickupAddress,
+  required String? pickupTimeText,
+  required bool needsLoanerPhone,
+}) {
   return {
-    'order_no': o.orderNo,
-    'customer_phone': o.customerPhone,
-    'customer_name': o.customerName,
-    'device_model': o.deviceModel,
-    'issue': o.issue,
-    'created_at': o.createdAt.toIso8601String(),
+    'order_no': orderNo,
+    'customer_phone': profile.phone,
+    'customer_name': profile.fullName,
+    'device_model': deviceModel,
+    'issue': issue,
     'delivery_method':
-    (o.deliveryMethod == DeliveryMethod.inPerson) ? 'in_person' : 'courier',
-    'pickup_address': o.pickupAddress,
-    'pickup_time_text': o.pickupTimeText,
-    'needs_loaner_phone': o.needsLoanerPhone,
-    'stage': o.stage.name,
-    'price_approval': o.priceApproval.name,
-    'quoted_price_toman': o.quotedPriceToman,
+    (deliveryMethod == DeliveryMethod.inPerson) ? 'in_person' : 'courier',
+    'pickup_address': pickupAddress,
+    'pickup_time_text': pickupTimeText,
+    'needs_loaner_phone': needsLoanerPhone,
+    // stage/price_approval defaults in DB; ولی صریح هم امنه
+    'stage': 'received',
+    'price_approval': 'not_needed',
+    'quoted_price_toman': 0,
   };
 }
 
-Future<void> _insertOrderToSupabase(OrderModel o) async {
+Future<void> _insertOrderToSupabase(Map<String, dynamic> row) async {
   final supabase = Supabase.instance.client;
-  await supabase.from('orders').insert(_orderToDb(o));
+  await supabase.from('orders').insert(row);
 }
 
 /* ============================== Boot ============================== */
@@ -686,9 +699,10 @@ class _LogoAvatarButton extends StatelessWidget {
             kLogoAsset,
             fit: BoxFit.contain,
             errorBuilder: (_, __, ___) => const Icon(
-                Icons.phone_android_outlined,
-                size: 22,
-                color: kTextPrimary),
+              Icons.phone_android_outlined,
+              size: 22,
+              color: kTextPrimary,
+            ),
           ),
         ),
       ),
@@ -744,9 +758,8 @@ class _TrustCarouselState extends State<_TrustCarousel> {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (ctx, c) {
-        final w = c.maxWidth == double.infinity
-            ? MediaQuery.of(ctx).size.width
-            : c.maxWidth;
+        final w =
+        c.maxWidth == double.infinity ? MediaQuery.of(ctx).size.width : c.maxWidth;
         final cardW = w * 0.92;
         final h = cardW / _aspect;
 
@@ -893,9 +906,10 @@ class _TrustFooter extends StatelessWidget {
             subtitle: 'دریافت و تحویل دستگاه با هماهنگی'),
         SizedBox(height: 10),
         _TrustLine(
-            icon: Icons.verified_outlined,
-            title: 'اعلام هزینه قبل از تعمیر',
-            subtitle: 'بدون تایید شما کاری انجام نمی‌شود'),
+          icon: Icons.verified_outlined,
+          title: 'اعلام هزینه قبل از تعمیر',
+          subtitle: 'بدون تایید شما کاری انجام نمی‌شود',
+        ),
       ],
     );
   }
@@ -962,6 +976,7 @@ class TrackStandalonePage extends StatelessWidget {
   }
 }
 
+/// ✅ TrackTab: فقط دیتابیس (v_orders_fa) — نه SharedPreferences
 class TrackTab extends StatefulWidget {
   final Profile? profile;
   const TrackTab({super.key, required this.profile});
@@ -975,8 +990,9 @@ class _TrackTabState extends State<TrackTab> {
   final _phoneCtrl = TextEditingController();
   final _orderCtrl = TextEditingController();
 
-  OrderModel? _found;
+  OrderDbRow? _found;
   String? _error;
+  bool _loading = false;
 
   @override
   void initState() {
@@ -995,21 +1011,47 @@ class _TrackTabState extends State<TrackTab> {
     setState(() {
       _error = null;
       _found = null;
+      _loading = true;
     });
 
-    if (!_formKey.currentState!.validate()) return;
+    if (!_formKey.currentState!.validate()) {
+      setState(() => _loading = false);
+      return;
+    }
 
     final phone = _phoneCtrl.text.trim();
     final orderNo = _orderCtrl.text.trim().toUpperCase();
 
-    final all = await _Prefs.loadOrders();
-    final match = all.where((o) =>
-    o.customerPhone == phone && o.orderNo.toUpperCase() == orderNo);
-    if (match.isEmpty) {
-      setState(() => _error = 'سفارشی با این مشخصات پیدا نشد.');
-      return;
+    try {
+      final supabase = Supabase.instance.client;
+      final res = await supabase
+          .from('v_orders_fa')
+          .select()
+          .eq('customer_phone', phone)
+          .eq('order_no', orderNo)
+          .maybeSingle();
+
+      if (!mounted) return;
+
+      if (res == null) {
+        setState(() {
+          _error = 'سفارشی با این مشخصات پیدا نشد.';
+          _loading = false;
+        });
+        return;
+      }
+
+      setState(() {
+        _found = OrderDbRow.fromJson((res as Map<String, dynamic>));
+        _loading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = 'خطا در ارتباط با سرور: $e';
+        _loading = false;
+      });
     }
-    setState(() => _found = match.first);
   }
 
   @override
@@ -1066,8 +1108,13 @@ class _TrackTabState extends State<TrackTab> {
                           backgroundColor: kGold,
                           foregroundColor: Colors.white,
                         ),
-                        onPressed: _search,
-                        icon: const Icon(Icons.search),
+                        onPressed: _loading ? null : _search,
+                        icon: _loading
+                            ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2))
+                            : const Icon(Icons.search),
                         label: const Text('جستجو'),
                       ),
                     ),
@@ -1095,7 +1142,7 @@ class _TrackTabState extends State<TrackTab> {
           ],
           if (_found != null) ...[
             const SizedBox(height: 12),
-            _OrderDetailsCard(order: _found!),
+            _OrderDetailsCardDb(order: _found!),
             const SizedBox(height: 12),
             OrderUpdatesPanel(orderNo: _found!.orderNo),
           ],
@@ -1213,55 +1260,40 @@ class _CreateOrderPageState extends State<CreateOrderPage> {
     if (!_formKey.currentState!.validate()) return;
 
     final orderNo = await _Prefs.nextLocalOrderNo();
-    final now = DateTime.now();
 
-    final order = OrderModel(
+    final row = _orderToDb(
       orderNo: orderNo,
-      customerPhone: widget.profile.phone,
-      customerName: widget.profile.fullName,
+      profile: widget.profile,
       deviceModel: _deviceCtrl.text.trim(),
       issue: _issueCtrl.text.trim(),
-      createdAt: now,
       deliveryMethod: _delivery,
       pickupAddress:
       _delivery == DeliveryMethod.courier ? _addressCtrl.text.trim() : null,
-      pickupTimeText: _delivery == DeliveryMethod.courier
-          ? _pickupTimeCtrl.text.trim()
-          : null,
+      pickupTimeText:
+      _delivery == DeliveryMethod.courier ? _pickupTimeCtrl.text.trim() : null,
       needsLoanerPhone: _needsLoaner,
-      stage: RepairStage.received,
-      priceApproval: PriceApproval.notNeeded,
-      quotedPriceToman: 0,
     );
-
-    final all = await _Prefs.loadOrders();
-    all.add(order);
-    await _Prefs.saveOrders(all);
 
     if (!mounted) return;
 
     try {
-      await _insertOrderToSupabase(order);
+      await _insertOrderToSupabase(row);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-            content:
-            Text('سفارش ثبت شد و روی سرور هم ذخیره شد ✅\n${order.orderNo}')),
+        SnackBar(content: Text('سفارش ثبت شد ✅\n$orderNo')),
       );
     } catch (e) {
       debugPrint('SUPABASE INSERT ERROR: $e');
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-            content: Text(
-                'سفارش ثبت شد ولی ذخیره روی سرور ناموفق بود ❌\n${order.orderNo}\n$e')),
+        SnackBar(content: Text('ثبت سفارش روی سرور ناموفق بود ❌\n$orderNo\n$e')),
       );
+      return;
     }
 
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) =>
-            OrderDetailsPage(orderNo: order.orderNo, profile: widget.profile),
+        builder: (_) => OrderDetailsPage(orderNo: orderNo, profile: widget.profile),
       ),
     );
   }
@@ -1300,9 +1332,8 @@ class _CreateOrderPageState extends State<CreateOrderPage> {
                             labelText: 'مدل دستگاه',
                             prefixIcon: Icon(Icons.phone_android_outlined),
                           ),
-                          validator: (v) => (v ?? '').trim().isEmpty
-                              ? 'مدل دستگاه را وارد کنید'
-                              : null,
+                          validator: (v) =>
+                          (v ?? '').trim().isEmpty ? 'مدل دستگاه را وارد کنید' : null,
                         ),
                         const SizedBox(height: 12),
                         TextFormField(
@@ -1312,15 +1343,13 @@ class _CreateOrderPageState extends State<CreateOrderPage> {
                             labelText: 'ایراد / توضیحات',
                             prefixIcon: Icon(Icons.report_problem_outlined),
                           ),
-                          validator: (v) => (v ?? '').trim().isEmpty
-                              ? 'ایراد را وارد کنید'
-                              : null,
+                          validator: (v) =>
+                          (v ?? '').trim().isEmpty ? 'ایراد را وارد کنید' : null,
                         ),
                         const SizedBox(height: 16),
                         const Text('نحوه تحویل دستگاه',
                             style: TextStyle(
-                                fontWeight: FontWeight.w900,
-                                color: kTextPrimary)),
+                                fontWeight: FontWeight.w900, color: kTextPrimary)),
                         const SizedBox(height: 8),
                         RadioListTile<DeliveryMethod>(
                           value: DeliveryMethod.inPerson,
@@ -1346,9 +1375,7 @@ class _CreateOrderPageState extends State<CreateOrderPage> {
                             ),
                             validator: (v) {
                               if (_delivery != DeliveryMethod.courier) return null;
-                              return (v ?? '').trim().isEmpty
-                                  ? 'آدرس را وارد کنید'
-                                  : null;
+                              return (v ?? '').trim().isEmpty ? 'آدرس را وارد کنید' : null;
                             },
                           ),
                           const SizedBox(height: 12),
@@ -1369,8 +1396,7 @@ class _CreateOrderPageState extends State<CreateOrderPage> {
                         ],
                         CheckboxListTile(
                           value: _needsLoaner,
-                          onChanged: (v) =>
-                              setState(() => _needsLoaner = v ?? false),
+                          onChanged: (v) => setState(() => _needsLoaner = v ?? false),
                           title: const Text('در زمان تعمیر، به گوشی جایگزین نیاز دارم',
                               style: TextStyle(color: kTextPrimary)),
                           controlAffinity: ListTileControlAffinity.leading,
@@ -1382,7 +1408,7 @@ class _CreateOrderPageState extends State<CreateOrderPage> {
                           child: FilledButton.icon(
                             style: FilledButton.styleFrom(
                               backgroundColor: kGold,
-                              foregroundColor: Colors.white, // ✅ FIX اصلی
+                              foregroundColor: Colors.white,
                               shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(16)),
                             ),
@@ -1410,7 +1436,7 @@ class _CreateOrderPageState extends State<CreateOrderPage> {
   }
 }
 
-/* ============================== Orders ============================== */
+/* ============================== Orders (from Supabase) ============================== */
 
 class MyOrdersPage extends StatefulWidget {
   final Profile profile;
@@ -1421,23 +1447,77 @@ class MyOrdersPage extends StatefulWidget {
 }
 
 class _MyOrdersPageState extends State<MyOrdersPage> {
-  List<OrderModel> _orders = [];
+  List<OrderDbRow> _orders = [];
   bool _loading = true;
+  String? _error;
+
+  RealtimeChannel? _ordersCh;
 
   @override
   void initState() {
     super.initState();
     _load();
+    _subscribeOrdersRealtime();
+  }
+
+  @override
+  void dispose() {
+    _ordersCh?.unsubscribe();
+    super.dispose();
   }
 
   Future<void> _load() async {
-    final all = await _Prefs.loadOrders();
-    final mine = all.where((o) => o.customerPhone == widget.profile.phone).toList()
-      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
     setState(() {
-      _orders = mine;
-      _loading = false;
+      _loading = true;
+      _error = null;
     });
+
+    try {
+      final supabase = Supabase.instance.client;
+      final res = await supabase
+          .from('v_orders_fa')
+          .select()
+          .eq('customer_phone', widget.profile.phone)
+          .order('created_at', ascending: false)
+          .limit(200);
+
+      final list = (res as List)
+          .cast<Map<String, dynamic>>()
+          .map(OrderDbRow.fromJson)
+          .toList();
+
+      if (!mounted) return;
+      setState(() {
+        _orders = list;
+        _loading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = e.toString();
+        _loading = false;
+      });
+    }
+  }
+
+  void _subscribeOrdersRealtime() {
+    final supabase = Supabase.instance.client;
+    _ordersCh = supabase.channel('orders_list_${widget.profile.phone}');
+
+    _ordersCh!
+        .onPostgresChanges(
+      event: PostgresChangeEvent.insert,
+      schema: 'public',
+      table: 'orders',
+      callback: (_) => _load(),
+    )
+        .onPostgresChanges(
+      event: PostgresChangeEvent.update,
+      schema: 'public',
+      table: 'orders',
+      callback: (_) => _load(),
+    )
+        .subscribe();
   }
 
   @override
@@ -1451,7 +1531,26 @@ class _MyOrdersPageState extends State<MyOrdersPage> {
               : ListView(
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
             children: [
-              if (_orders.isEmpty)
+              if (_error != null)
+                _GlassCard(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.error_outline, color: kTextPrimary),
+                        const SizedBox(width: 10),
+                        Expanded(
+                            child: Text('خطا: $_error',
+                                style: const TextStyle(color: kTextPrimary))),
+                        TextButton(
+                            onPressed: _load,
+                            child: const Text('تلاش دوباره',
+                                style: TextStyle(color: kGold))),
+                      ],
+                    ),
+                  ),
+                )
+              else if (_orders.isEmpty)
                 const _GlassCard(
                   child: Padding(
                     padding: EdgeInsets.all(16),
@@ -1464,19 +1563,17 @@ class _MyOrdersPageState extends State<MyOrdersPage> {
                       (o) => _GlassCard(
                     child: ListTile(
                       title: Text(o.orderNo,
-                          style:
-                          const TextStyle(color: kTextPrimary)),
+                          style: const TextStyle(color: kTextPrimary)),
                       subtitle: Text(
-                        '${o.deviceModel} • ${_stageLabel(o.stage)}',
+                        '${o.deviceModel} • ${o.stageFa}',
                         style: const TextStyle(color: kTextSoft),
                       ),
-                      trailing: const Icon(Icons.arrow_forward,
-                          color: kTextTertiary),
+                      trailing:
+                      const Icon(Icons.arrow_forward, color: kTextTertiary),
                       onTap: () => Navigator.of(context).push(
                         MaterialPageRoute(
                           builder: (_) => OrderDetailsPage(
-                              orderNo: o.orderNo,
-                              profile: widget.profile),
+                              orderNo: o.orderNo, profile: widget.profile),
                         ),
                       ),
                     ),
@@ -1493,34 +1590,180 @@ class _MyOrdersPageState extends State<MyOrdersPage> {
 class OrderDetailsPage extends StatefulWidget {
   final String orderNo;
   final Profile profile;
-  const OrderDetailsPage(
-      {super.key, required this.orderNo, required this.profile});
+  const OrderDetailsPage({super.key, required this.orderNo, required this.profile});
 
   @override
   State<OrderDetailsPage> createState() => _OrderDetailsPageState();
 }
 
 class _OrderDetailsPageState extends State<OrderDetailsPage> {
-  OrderModel? _order;
+  OrderDbRow? _order;
   bool _loading = true;
+  String? _orderError;
+
+  // Pricing / approval
+  bool _pricingLoading = true;
+  String? _pricingError;
+  int _quotedToman = 0;
+  String _approval = 'not_needed'; // pending/approved/rejected/not_needed
+  String _approvalFa = 'نیاز ندارد';
+  String _stage = 'received';
+  String _stageFa = 'ثبت سفارش';
+
+  RealtimeChannel? _ordersRealtimeCh;
 
   @override
   void initState() {
     super.initState();
-    _load();
+    _loadOrderFromServer();
+    _subscribeOrderRealtime();
   }
 
-  Future<void> _load() async {
-    final all = await _Prefs.loadOrders();
-    final o = all.where((x) => x.orderNo == widget.orderNo).toList();
+  @override
+  void dispose() {
+    _ordersRealtimeCh?.unsubscribe();
+    super.dispose();
+  }
+
+  Future<void> _loadOrderFromServer() async {
     setState(() {
-      _order = o.isEmpty ? null : o.first;
-      _loading = false;
+      _loading = true;
+      _orderError = null;
+      _pricingLoading = true;
+      _pricingError = null;
     });
+
+    try {
+      final supabase = Supabase.instance.client;
+      final res = await supabase
+          .from('v_orders_fa')
+          .select()
+          .eq('order_no', widget.orderNo)
+          .maybeSingle();
+
+      if (!mounted) return;
+
+      if (res == null) {
+        setState(() {
+          _order = null;
+          _loading = false;
+          _orderError = 'سفارش پیدا نشد.';
+          _pricingLoading = false;
+        });
+        return;
+      }
+
+      final o = OrderDbRow.fromJson(res as Map<String, dynamic>);
+
+      setState(() {
+        _order = o;
+        _loading = false;
+
+        _quotedToman = o.quotedPriceToman;
+        _approval = o.priceApproval;
+        _approvalFa = o.priceApprovalFa;
+        _stage = o.stage;
+        _stageFa = o.stageFa;
+
+        _pricingLoading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _orderError = e.toString();
+        _loading = false;
+        _pricingError = e.toString();
+        _pricingLoading = false;
+      });
+    }
+  }
+
+  void _subscribeOrderRealtime() {
+    final supabase = Supabase.instance.client;
+    _ordersRealtimeCh = supabase.channel('orders_realtime_${widget.orderNo}');
+
+    _ordersRealtimeCh!
+        .onPostgresChanges(
+      event: PostgresChangeEvent.update,
+      schema: 'public',
+      table: 'orders',
+      filter: PostgresChangeFilter(
+        type: PostgresChangeFilterType.eq,
+        column: 'order_no',
+        value: widget.orderNo,
+      ),
+      callback: (payload) {
+        try {
+          final row = payload.newRecord;
+          if (row.isEmpty) return;
+
+          final quoted =
+              (row['quoted_price_toman'] as num?)?.toInt() ?? _quotedToman;
+          final pa = (row['price_approval'] as String?) ?? _approval;
+          final st = (row['stage'] as String?) ?? _stage;
+
+          if (!mounted) return;
+
+          setState(() {
+            _quotedToman = quoted;
+            _approval = pa;
+            _approvalFa = _priceApprovalFaFromCode(pa);
+
+            _stage = st;
+            _stageFa = _stageFaFromCode(st);
+
+            // اگر order جزئیات نمایش می‌ده، همزمان sync کنیم
+            if (_order != null) {
+              _order = _order!.copyWith(
+                stage: st,
+                stageFa: _stageFaFromCode(st),
+                quotedPriceToman: quoted,
+                priceApproval: pa,
+                priceApprovalFa: _priceApprovalFaFromCode(pa),
+              );
+            }
+          });
+        } catch (_) {}
+      },
+    )
+        .subscribe();
+  }
+
+  Future<void> _setApproval(String to) async {
+    if (_quotedToman <= 0) return;
+
+    setState(() => _pricingError = null);
+
+    try {
+      final supabase = Supabase.instance.client;
+
+      // فقط update روی orders — تریگر دیتابیس خودش order_updates رو ثبت می‌کند.
+      await supabase.from('orders').update({'price_approval': to}).eq('order_no', widget.orderNo);
+
+      if (!mounted) return;
+
+      setState(() {
+        _approval = to;
+        _approvalFa = _priceApprovalFaFromCode(to);
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(to == 'approved' ? 'هزینه تایید شد ✅' : 'هزینه رد شد ❌')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _pricingError = e.toString());
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('خطا در ثبت تایید/رد ❌\n$e')),
+      );
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    final approvalCode = _approval;
+    final approvalFa = _approvalFa;
+
     return Scaffold(
       appBar: AppBar(title: const Text('جزئیات سفارش')),
       body: SafeArea(
@@ -1531,15 +1774,27 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
             children: [
               if (_order == null)
-                const _GlassCard(
+                _GlassCard(
                   child: Padding(
-                    padding: EdgeInsets.all(16),
-                    child: Text('سفارش پیدا نشد.',
-                        style: TextStyle(color: kTextPrimary)),
+                    padding: const EdgeInsets.all(16),
+                    child: Text(_orderError ?? 'سفارش پیدا نشد.',
+                        style: const TextStyle(color: kTextPrimary)),
                   ),
                 )
               else ...[
-                _OrderDetailsCard(order: _order!),
+                _OrderDetailsCardDb(order: _order!),
+                const SizedBox(height: 12),
+                _PricingAndPaymentPanelDb(
+                  loading: _pricingLoading,
+                  error: _pricingError,
+                  quotedToman: _quotedToman,
+                  approvalCode: approvalCode,
+                  approvalFa: approvalFa,
+                  stageFa: _stageFa,
+                  onRefresh: _loadOrderFromServer,
+                  onApprove: () => _setApproval('approved'),
+                  onReject: () => _setApproval('rejected'),
+                ),
                 const SizedBox(height: 12),
                 OrderUpdatesPanel(orderNo: widget.orderNo),
                 const SizedBox(height: 12),
@@ -1554,8 +1809,7 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
                     onTap: () => Navigator.of(context).push(
                       MaterialPageRoute(
                         builder: (_) => ChatStandalonePage(
-                            profile: widget.profile,
-                            orderNo: widget.orderNo),
+                            profile: widget.profile, orderNo: widget.orderNo),
                       ),
                     ),
                   ),
@@ -1563,6 +1817,220 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
               ],
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/* ============================== Pricing / Approval / Payment Panel (DB) ============================== */
+
+class _PricingAndPaymentPanelDb extends StatelessWidget {
+  final bool loading;
+  final String? error;
+  final int quotedToman;
+  final String approvalCode; // pending/approved/rejected/not_needed
+  final String approvalFa; // فارسی
+  final String stageFa; // فارسی
+  final VoidCallback onRefresh;
+  final VoidCallback onApprove;
+  final VoidCallback onReject;
+
+  const _PricingAndPaymentPanelDb({
+    required this.loading,
+    required this.error,
+    required this.quotedToman,
+    required this.approvalCode,
+    required this.approvalFa,
+    required this.stageFa,
+    required this.onRefresh,
+    required this.onApprove,
+    required this.onReject,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final hasQuote = quotedToman > 0;
+
+    return _GlassCard(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('هزینه و پرداخت',
+                style: TextStyle(fontWeight: FontWeight.w900, color: kTextPrimary)),
+            const SizedBox(height: 10),
+
+            // stage display (Persian)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: _alpha(kAccentSoft, 0.55),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: kBorder),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.timeline, color: kGold2, size: 18),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text('مرحله فعلی: $stageFa',
+                        style: const TextStyle(
+                            color: kTextPrimary, fontWeight: FontWeight.w800)),
+                  ),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 12),
+
+            if (loading)
+              const Row(
+                children: [
+                  SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2)),
+                  SizedBox(width: 10),
+                  Text('در حال دریافت...', style: TextStyle(color: kTextSoft)),
+                ],
+              )
+            else ...[
+              if (error != null) ...[
+                Row(
+                  children: [
+                    const Icon(Icons.error_outline, color: kTextPrimary),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text('خطا در دریافت: $error',
+                          style: const TextStyle(color: kTextPrimary)),
+                    ),
+                    TextButton(
+                        onPressed: onRefresh,
+                        child: const Text('تلاش دوباره',
+                            style: TextStyle(color: kGold))),
+                  ],
+                ),
+                const SizedBox(height: 10),
+              ],
+
+              // هزینه اعلامی
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: _alpha(kAccentSoft, 0.55),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: kBorder),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('هزینه اعلامی',
+                        style: TextStyle(
+                            fontWeight: FontWeight.w800, color: kTextPrimary)),
+                    const SizedBox(height: 6),
+                    Text(
+                      hasQuote
+                          ? '${_toPersianDigits(_formatToman(quotedToman))} تومان'
+                          : 'هزینه هنوز اعلام نشده است.',
+                      style: const TextStyle(color: kTextSoft, height: 1.6),
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 12),
+
+              // تایید/رد
+              if (!hasQuote)
+                const Text(
+                    'بعد از اعلام هزینه توسط موبیکس، امکان تایید/پرداخت فعال می‌شود.',
+                    style: TextStyle(color: kTextSoft, height: 1.6))
+              else if (approvalCode == 'pending') ...[
+                const Text('لطفاً هزینه را تایید یا رد کنید:',
+                    style: TextStyle(
+                        color: kTextPrimary, fontWeight: FontWeight.w700)),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Expanded(
+                      child: FilledButton.icon(
+                        style: FilledButton.styleFrom(
+                            backgroundColor: kGold, foregroundColor: Colors.white),
+                        onPressed: onApprove,
+                        icon: const Icon(Icons.check_circle_outline),
+                        label: const Text('تایید هزینه'),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: onReject,
+                        icon: const Icon(Icons.cancel_outlined),
+                        label: const Text('رد هزینه'),
+                      ),
+                    ),
+                  ],
+                ),
+              ] else if (approvalCode == 'approved') ...[
+                Row(
+                  children: const [
+                    Icon(Icons.verified_outlined, color: kGold2),
+                    SizedBox(width: 8),
+                    Text('هزینه توسط شما تایید شد ✅',
+                        style: TextStyle(
+                            color: kTextPrimary, fontWeight: FontWeight.w800)),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Text('وضعیت تایید: $approvalFa',
+                    style: const TextStyle(color: kTextSoft)),
+                const SizedBox(height: 12),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: kBorder),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: const [
+                      Text('پرداخت',
+                          style: TextStyle(
+                              fontWeight: FontWeight.w900, color: kTextPrimary)),
+                      SizedBox(height: 6),
+                      Text('پرداخت آنلاین به‌زودی فعال می‌شود.',
+                          style: TextStyle(color: kTextSoft, height: 1.6)),
+                    ],
+                  ),
+                ),
+              ] else if (approvalCode == 'rejected') ...[
+                Row(
+                  children: const [
+                    Icon(Icons.info_outline, color: kTextPrimary),
+                    SizedBox(width: 8),
+                    Text('هزینه توسط شما رد شد.',
+                        style: TextStyle(
+                            color: kTextPrimary, fontWeight: FontWeight.w800)),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Text('وضعیت تایید: $approvalFa',
+                    style: const TextStyle(color: kTextSoft)),
+                const SizedBox(height: 6),
+                const Text('به همین دلیل بخش پرداخت نمایش داده نمی‌شود.',
+                    style: TextStyle(color: kTextSoft, height: 1.6)),
+              ] else ...[
+                Text('وضعیت تایید: $approvalFa',
+                    style: const TextStyle(color: kTextSoft, height: 1.6)),
+              ],
+            ],
+          ],
         ),
       ),
     );
@@ -1607,11 +2075,11 @@ class _OrderUpdatesPanelState extends State<OrderUpdatesPanel> {
     try {
       final supabase = Supabase.instance.client;
       final res = await supabase
-          .from('order_updates')
+          .from('v_order_updates_fa')
           .select()
           .eq('order_no', widget.orderNo)
           .order('created_at', ascending: false)
-          .limit(20);
+          .limit(50);
 
       final list = (res as List)
           .cast<Map<String, dynamic>>()
@@ -1645,14 +2113,9 @@ class _OrderUpdatesPanelState extends State<OrderUpdatesPanel> {
         column: 'order_no',
         value: widget.orderNo,
       ),
-      callback: (payload) {
-        try {
-          final newRow = payload.newRecord;
-          if (newRow.isEmpty) return;
-          final upd = OrderUpdateDb.fromJson(newRow);
-          if (!mounted) return;
-          setState(() => _items = [upd, ..._items].take(30).toList());
-        } catch (_) {}
+      callback: (_) {
+        // برای اینکه title_fa_final از view بیاد، امن‌ترین کار reload کوتاهه
+        _load();
       },
     )
         .subscribe();
@@ -1667,8 +2130,7 @@ class _OrderUpdatesPanelState extends State<OrderUpdatesPanel> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text('آخرین وضعیت سفارش',
-                style: TextStyle(
-                    fontWeight: FontWeight.w900, color: kTextPrimary)),
+                style: TextStyle(fontWeight: FontWeight.w900, color: kTextPrimary)),
             const SizedBox(height: 10),
             if (_loading)
               const Padding(
@@ -1694,8 +2156,8 @@ class _OrderUpdatesPanelState extends State<OrderUpdatesPanel> {
                           style: const TextStyle(color: kTextPrimary))),
                   TextButton(
                       onPressed: _load,
-                      child:
-                      const Text('تلاش دوباره', style: TextStyle(color: kGold))),
+                      child: const Text('تلاش دوباره',
+                          style: TextStyle(color: kGold))),
                 ],
               )
             else if (_items.isEmpty)
@@ -1716,10 +2178,9 @@ class _OrderUpdatesPanelState extends State<OrderUpdatesPanel> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            u.stage,
+                            u.titleFa,
                             style: const TextStyle(
-                                fontWeight: FontWeight.w900,
-                                color: kTextPrimary),
+                                fontWeight: FontWeight.w900, color: kTextPrimary),
                           ),
                           if ((u.note ?? '').trim().isNotEmpty) ...[
                             const SizedBox(height: 6),
@@ -1730,8 +2191,7 @@ class _OrderUpdatesPanelState extends State<OrderUpdatesPanel> {
                           const SizedBox(height: 8),
                           Text(
                             _toPersianDigits(_formatJalaliDateTime(u.createdAt)),
-                            style:
-                            const TextStyle(fontSize: 11, color: kTextSoft),
+                            style: const TextStyle(fontSize: 11, color: kTextSoft),
                           ),
                         ],
                       ),
@@ -1745,11 +2205,11 @@ class _OrderUpdatesPanelState extends State<OrderUpdatesPanel> {
   }
 }
 
-/* ============================== Details Card (No Call/WhatsApp) ============================== */
+/* ============================== Details Card (DB) ============================== */
 
-class _OrderDetailsCard extends StatelessWidget {
-  final OrderModel order;
-  const _OrderDetailsCard({required this.order});
+class _OrderDetailsCardDb extends StatelessWidget {
+  final OrderDbRow order;
+  const _OrderDetailsCardDb({required this.order});
 
   @override
   Widget build(BuildContext context) {
@@ -1775,11 +2235,10 @@ class _OrderDetailsCard extends StatelessWidget {
             const SizedBox(height: 8),
             _kv('زمان ثبت', _formatJalaliDateTime(order.createdAt)),
             const SizedBox(height: 8),
-            _kv('مرحله', _stageLabel(order.stage)),
+            _kv('مرحله', order.stageFa),
             const SizedBox(height: 8),
-            _kv('نوع تحویل',
-                order.deliveryMethod == DeliveryMethod.inPerson ? 'حضوری' : 'پیک'),
-            if (order.deliveryMethod == DeliveryMethod.courier) ...[
+            _kv('نوع تحویل', order.deliveryMethod == 'courier' ? 'پیک' : 'حضوری'),
+            if (order.deliveryMethod == 'courier') ...[
               const SizedBox(height: 8),
               _kv('آدرس', order.pickupAddress ?? '-'),
               const SizedBox(height: 8),
@@ -1798,10 +2257,11 @@ class _OrderDetailsCard extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         SizedBox(
-            width: 100,
-            child: Text(k,
-                style: const TextStyle(
-                    fontWeight: FontWeight.w800, color: kTextSoft))),
+          width: 100,
+          child: Text(k,
+              style:
+              const TextStyle(fontWeight: FontWeight.w800, color: kTextSoft)),
+        ),
         const SizedBox(width: 8),
         Expanded(child: Text(v, style: const TextStyle(color: kTextPrimary))),
       ],
@@ -1839,10 +2299,8 @@ class _AppDrawer extends StatelessWidget {
                 onTap: () {
                   if (profile == null) return;
                   Navigator.pop(context);
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                        builder: (_) => ProfileStandalonePage(profile: profile!)),
-                  );
+                  Navigator.of(context).push(MaterialPageRoute(
+                      builder: (_) => ProfileStandalonePage(profile: profile!)));
                 },
               ),
             ),
@@ -1853,15 +2311,10 @@ class _AppDrawer extends StatelessWidget {
               Navigator.of(context).push(
                   MaterialPageRoute(builder: (_) => MyOrdersPage(profile: profile!)));
             }),
-            _drawerItem(context, Icons.search_outlined, 'پیگیری سفارش', () {
-              Navigator.pop(context);
-              Navigator.of(context).push(MaterialPageRoute(
-                  builder: (_) => TrackStandalonePage(profile: profile)));
-            }),
             _drawerItem(context, Icons.rule_outlined, 'قوانین و مقررات', () {
               Navigator.pop(context);
-              Navigator.of(context)
-                  .push(MaterialPageRoute(builder: (_) => const TermsReadOnlyPage()));
+              Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const TermsReadOnlyPage()));
             }),
             _drawerItem(context, Icons.info_outline, 'درباره Mobix', () {
               Navigator.pop(context);
@@ -1897,7 +2350,93 @@ class _AppDrawer extends StatelessWidget {
   }
 }
 
-/* ============================== Signup Flow ============================== */
+/* ============================== Signup Flow (CUSTOM OTP via Edge Functions) ============================== */
+
+/// خروجی: شماره استاندارد ملی برای اپ (09xxxxxxxxx)
+/// اگر ورودی +98 یا 98 یا 0 یا بدون صفر باشد، درستش می‌کند.
+String _normalizeIranPhoneToNational(String input) {
+  var s = input.trim();
+  s = s.replaceAll(RegExp(r'[^0-9+]'), '');
+
+  // +98xxxxxxxxxx
+  if (s.startsWith('+')) {
+    if (s.startsWith('+98')) {
+      s = s.substring(3);
+    } else {
+      // کشور دیگری است
+      return input.trim();
+    }
+  }
+
+  // 98xxxxxxxxxx
+  if (s.startsWith('98')) {
+    s = s.substring(2);
+  }
+
+  // اگر با 0 شروع می‌شود، همان بماند
+  if (s.startsWith('0')) {
+    // ok
+  } else {
+    // اگر 10 رقم است (912xxxxxxx) یک 0 جلوش می‌گذاریم
+    if (RegExp(r'^\d{10}$').hasMatch(s)) {
+      s = '0$s';
+    }
+  }
+
+  return s;
+}
+
+Map<String, dynamic> _asMap(dynamic data) {
+  if (data is Map<String, dynamic>) return data;
+  if (data is Map) {
+    return data.map((k, v) => MapEntry(k.toString(), v));
+  }
+  return <String, dynamic>{};
+}
+
+/// ✅ invoke helper (NEW supabase_flutter: no resp.error)
+Future<Map<String, dynamic>> _invokeEdgeFunction(
+    String functionName, {
+      required Map<String, dynamic> body,
+      String? invalidResponseMessage,
+    }) async {
+  final supabase = Supabase.instance.client;
+
+  try {
+    final resp = await supabase.functions.invoke(functionName, body: body);
+
+    final m = _asMap(resp.data);
+    if (m.isEmpty) {
+      throw Exception(
+          invalidResponseMessage ?? 'پاسخ نامعتبر از سرور ($functionName)');
+    }
+
+    return m;
+  } catch (e) {
+    throw Exception('خطا در فراخوانی $functionName: $e');
+  }
+}
+
+/// ✅ request-otp
+Future<Map<String, dynamic>> _requestOtpViaEdge(String phoneNational) async {
+  return _invokeEdgeFunction(
+    'request-otp',
+    body: {'phone': phoneNational},
+    invalidResponseMessage: 'پاسخ نامعتبر از سرور OTP',
+  );
+}
+
+/// ✅ verify-otp
+Future<Map<String, dynamic>> _verifyOtpViaEdge({
+  required String phoneNational,
+  required String code,
+}) async {
+  return _invokeEdgeFunction(
+    'verify-otp',
+    body: {'phone': phoneNational, 'code': code},
+    invalidResponseMessage: 'پاسخ نامعتبر از سرور تایید OTP',
+  );
+}
 
 class SignupFlowPhonePage extends StatefulWidget {
   const SignupFlowPhonePage({super.key});
@@ -1910,21 +2449,86 @@ class _SignupFlowPhonePageState extends State<SignupFlowPhonePage> {
   final _formKey = GlobalKey<FormState>();
   final _phoneCtrl = TextEditingController();
 
+  bool _acceptedTerms = false;
+  bool _loading = false;
+
   @override
   void dispose() {
     _phoneCtrl.dispose();
     super.dispose();
   }
 
-  void _next() {
+  Future<void> _next() async {
+    if (_loading) return;
     if (!_formKey.currentState!.validate()) return;
-    Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => TermsPage(phone: _phoneCtrl.text.trim())),
-    );
+
+    if (!_acceptedTerms) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('برای ادامه باید قوانین را بپذیرید.')),
+      );
+      return;
+    }
+
+    final national = _normalizeIranPhoneToNational(_phoneCtrl.text);
+
+    // اعتبارسنجی ساده ایران
+    final onlyDigits = national.replaceAll(RegExp(r'[^0-9]'), '');
+    if (!(onlyDigits.startsWith('09') && onlyDigits.length == 11)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text(
+                'شماره موبایل ایران معتبر وارد کنید (مثلاً 09123456789).')),
+      );
+      return;
+    }
+
+    setState(() => _loading = true);
+
+    try {
+      final r = await _requestOtpViaEdge(national);
+
+      final ok = (r['ok'] == true);
+      if (!ok) {
+        final where = r['where']?.toString();
+        final msg = r['error']?.toString() ??
+            r['message']?.toString() ??
+            r['smsir_response']?.toString() ??
+            'ارسال کد ناموفق بود';
+        throw Exception('${where ?? 'server'}: $msg');
+      }
+
+      final expires = (r['expires_in_seconds'] is num)
+          ? (r['expires_in_seconds'] as num).toInt()
+          : 120;
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('کد تایید ارسال شد ✅')),
+      );
+
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => SignupOtpPage(
+            phoneNational: national,
+            expiresInSeconds: expires,
+          ),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('ارسال کد ناموفق بود ❌\n$e')),
+      );
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    final canContinue = _acceptedTerms && !_loading;
+
     return Scaffold(
       appBar: AppBar(title: const Text('ورود / ثبت‌نام')),
       body: SafeArea(
@@ -1976,19 +2580,60 @@ class _SignupFlowPhonePageState extends State<SignupFlowPhonePage> {
                             TextFormField(
                               controller: _phoneCtrl,
                               keyboardType: TextInputType.phone,
-                              decoration: const InputDecoration(
+                              decoration: InputDecoration(
                                 hintText: 'مثلاً 09120000000',
-                                prefixIcon: Icon(Icons.call_outlined),
+                                prefixIcon: const Icon(Icons.call_outlined),
+                                suffixIcon: _loading
+                                    ? const Padding(
+                                  padding: EdgeInsets.all(12),
+                                  child: SizedBox(
+                                      width: 18,
+                                      height: 18,
+                                      child: CircularProgressIndicator(
+                                          strokeWidth: 2)),
+                                )
+                                    : null,
                               ),
                               validator: (v) {
                                 final s = (v ?? '').trim();
                                 if (s.isEmpty) return 'شماره موبایل را وارد کنید';
-                                if (s.length < 10) return 'شماره موبایل معتبر نیست';
+                                final n = _normalizeIranPhoneToNational(s)
+                                    .replaceAll(RegExp(r'[^0-9]'), '');
+                                if (!(n.startsWith('09') && n.length == 11)) {
+                                  return 'شماره موبایل معتبر نیست';
+                                }
                                 return null;
                               },
                               onFieldSubmitted: (_) => _next(),
                             ),
-                            const SizedBox(height: 14),
+                            const SizedBox(height: 12),
+
+                            // ✅ چک‌باکس واقعی پذیرش قوانین
+                            CheckboxListTile(
+                              value: _acceptedTerms,
+                              onChanged: (v) =>
+                                  setState(() => _acceptedTerms = v ?? false),
+                              title: const Text(
+                                  'قوانین و مقررات را مطالعه کرده و می‌پذیرم.',
+                                  style: TextStyle(color: kTextPrimary)),
+                              controlAffinity: ListTileControlAffinity.leading,
+                            ),
+                            Padding(
+                              padding: const EdgeInsets.only(top: 2),
+                              child: TextButton(
+                                onPressed: _loading
+                                    ? null
+                                    : () => Navigator.of(context).push(
+                                  MaterialPageRoute(
+                                      builder: (_) =>
+                                      const TermsReadOnlyPage()),
+                                ),
+                                child: const Text('مشاهده قوانین و مقررات',
+                                    style: TextStyle(color: kGold)),
+                              ),
+                            ),
+
+                            const SizedBox(height: 10),
                             SizedBox(
                               width: double.infinity,
                               height: 52,
@@ -1996,16 +2641,10 @@ class _SignupFlowPhonePageState extends State<SignupFlowPhonePage> {
                                 style: FilledButton.styleFrom(
                                     backgroundColor: kGold,
                                     foregroundColor: Colors.white),
-                                onPressed: _next,
+                                onPressed: canContinue ? _next : null,
                                 icon: const Icon(Icons.arrow_forward),
-                                label: const Text('ادامه'),
+                                label: Text(_loading ? 'در حال ارسال...' : 'ادامه'),
                               ),
-                            ),
-                            const SizedBox(height: 10),
-                            const Text(
-                              'با ثبت نام در موبیکس، شرایط و قوانین را قبول می‌کنم.',
-                              style: TextStyle(
-                                  color: kTextSoft, fontSize: 12, height: 1.6),
                             ),
                           ],
                         ),
@@ -2022,77 +2661,15 @@ class _SignupFlowPhonePageState extends State<SignupFlowPhonePage> {
   }
 }
 
-class TermsPage extends StatefulWidget {
-  final String phone;
-  const TermsPage({super.key, required this.phone});
-
-  @override
-  State<TermsPage> createState() => _TermsPageState();
-}
-
-class _TermsPageState extends State<TermsPage> {
-  bool _accepted = false;
-
-  void _next() {
-    if (!_accepted) return;
-    Navigator.of(context).pushReplacement(
-      MaterialPageRoute(builder: (_) => SignupOtpPage(phone: widget.phone)),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('قوانین و مقررات')),
-      body: SafeArea(
-        child: _CenterMax(
-          child: ListView(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
-            children: [
-              _GlassCard(
-                child: const Padding(
-                  padding: EdgeInsets.all(16),
-                  child: Text(
-                    'شرایط و مقررات موبیکس (نسخه اولیه)\n\n'
-                        '1) مشتری موظف است اطلاعات صحیح وارد کند.\n'
-                        '2) هزینه‌ها پس از بررسی اعلام می‌شود.\n'
-                        '3) زمان تحویل بسته به نوع تعمیر متغیر است.\n'
-                        '4) حفظ حریم خصوصی مشتری رعایت می‌شود.\n\n'
-                        'این متن در نسخه بعدی کامل و رسمی می‌شود.',
-                    style: TextStyle(height: 1.7, color: kTextSoft),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 12),
-              CheckboxListTile(
-                value: _accepted,
-                onChanged: (v) => setState(() => _accepted = v ?? false),
-                title: const Text('قوانین و مقررات را مطالعه کرده و می‌پذیرم.',
-                    style: TextStyle(color: kTextPrimary)),
-                controlAffinity: ListTileControlAffinity.leading,
-              ),
-              const SizedBox(height: 12),
-              SizedBox(
-                width: double.infinity,
-                height: 52,
-                child: FilledButton(
-                  style: FilledButton.styleFrom(
-                      backgroundColor: kGold, foregroundColor: Colors.white),
-                  onPressed: _accepted ? _next : null,
-                  child: const Text('ادامه'),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 class SignupOtpPage extends StatefulWidget {
-  final String phone;
-  const SignupOtpPage({super.key, required this.phone});
+  final String phoneNational; // 09...
+  final int expiresInSeconds;
+
+  const SignupOtpPage({
+    super.key,
+    required this.phoneNational,
+    required this.expiresInSeconds,
+  });
 
   @override
   State<SignupOtpPage> createState() => _SignupOtpPageState();
@@ -2101,12 +2678,15 @@ class SignupOtpPage extends StatefulWidget {
 class _SignupOtpPageState extends State<SignupOtpPage> {
   final _codeCtrl = TextEditingController();
   Timer? _timer;
-  int _seconds = 60;
+  int _seconds = 120;
+
+  bool _verifying = false;
+  bool _resending = false;
 
   @override
   void initState() {
     super.initState();
-    _startTimer();
+    _startTimer(widget.expiresInSeconds);
   }
 
   @override
@@ -2116,9 +2696,9 @@ class _SignupOtpPageState extends State<SignupOtpPage> {
     super.dispose();
   }
 
-  void _startTimer() {
+  void _startTimer(int secs) {
     _timer?.cancel();
-    setState(() => _seconds = 60);
+    setState(() => _seconds = secs <= 0 ? 120 : secs);
     _timer = Timer.periodic(const Duration(seconds: 1), (t) {
       if (!mounted) return;
       if (_seconds <= 1) {
@@ -2130,37 +2710,97 @@ class _SignupOtpPageState extends State<SignupOtpPage> {
     });
   }
 
-  void _verify() {
-    final code = _codeCtrl.text.trim();
-    if (code.isEmpty || code.length < 4) {
+  Future<void> _verify() async {
+    if (_verifying) return;
+
+    final code = _codeCtrl.text.trim().replaceAll(RegExp(r'[^0-9]'), '');
+    if (code.length != 6) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('کد تایید را کامل وارد کنید.')),
+        const SnackBar(content: Text('کد تایید باید ۶ رقم باشد.')),
       );
       return;
     }
 
-    Navigator.of(context).pushReplacement(
-      MaterialPageRoute(builder: (_) => ProfileNamePage(phone: widget.phone)),
-    );
+    setState(() => _verifying = true);
+
+    try {
+      final r = await _verifyOtpViaEdge(
+        phoneNational: widget.phoneNational,
+        code: code,
+      );
+
+      final ok = (r['ok'] == true);
+      if (!ok) {
+        final msg = r['error']?.toString() ??
+            r['message']?.toString() ??
+            'کد نامعتبر است';
+        throw Exception(msg);
+      }
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('ورود موفق ✅')),
+      );
+
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(
+          builder: (_) => ProfileNamePage(phone: widget.phoneNational),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('کد نامعتبر است یا منقضی شده ❌\n$e')),
+      );
+    } finally {
+      if (mounted) setState(() => _verifying = false);
+    }
   }
 
-  void _resendSms() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('ارسال مجدد پیامک (نمایشی) انجام شد.')),
-    );
-    _startTimer();
-  }
+  Future<void> _resend() async {
+    if (_resending) return;
+    if (_seconds > 0) return;
 
-  void _resendCall() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('ارسال مجدد تماس (نمایشی) انجام شد.')),
-    );
-    _startTimer();
+    setState(() => _resending = true);
+
+    try {
+      final r = await _requestOtpViaEdge(widget.phoneNational);
+
+      final ok = (r['ok'] == true);
+      if (!ok) {
+        final where = r['where']?.toString();
+        final msg = r['error']?.toString() ??
+            r['message']?.toString() ??
+            r['smsir_response']?.toString() ??
+            'ارسال مجدد ناموفق بود';
+        throw Exception('${where ?? 'server'}: $msg');
+      }
+
+      final expires = (r['expires_in_seconds'] is num)
+          ? (r['expires_in_seconds'] as num).toInt()
+          : 120;
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('کد جدید ارسال شد ✅')),
+      );
+
+      _startTimer(expires);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('ارسال مجدد ناموفق بود ❌\n$e')),
+      );
+    } finally {
+      if (mounted) setState(() => _resending = false);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final phoneFa = _toPersianDigits(widget.phone);
+    final phoneFa = _toPersianDigits(widget.phoneNational);
 
     return Scaffold(
       appBar: AppBar(title: const Text('تایید شماره')),
@@ -2184,7 +2824,7 @@ class _SignupOtpPageState extends State<SignupOtpPage> {
                     ),
                     const SizedBox(height: 10),
                     Text(
-                      'کد تایید را با پیامک به شماره $phoneFa فرستادیم',
+                      'کد تایید را به شماره $phoneFa ارسال کردیم',
                       textAlign: TextAlign.center,
                       style: const TextStyle(color: kTextSoft, height: 1.6),
                     ),
@@ -2193,15 +2833,28 @@ class _SignupOtpPageState extends State<SignupOtpPage> {
                       controller: _codeCtrl,
                       keyboardType: TextInputType.number,
                       textAlign: TextAlign.center,
-                      decoration: const InputDecoration(
-                        hintText: 'مثلاً 1234',
-                        prefixIcon: Icon(Icons.password_outlined),
+                      maxLength: 6,
+                      decoration: InputDecoration(
+                        hintText: 'مثلاً 123456',
+                        prefixIcon: const Icon(Icons.password_outlined),
+                        counterText: '',
+                        suffixIcon: _verifying
+                            ? const Padding(
+                          padding: EdgeInsets.all(12),
+                          child: SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(
+                                  strokeWidth: 2)),
+                        )
+                            : null,
                       ),
                       onSubmitted: (_) => _verify(),
                     ),
                     const SizedBox(height: 10),
                     TextButton(
-                      onPressed: () => Navigator.of(context).pop(),
+                      onPressed:
+                      _verifying ? null : () => Navigator.of(context).pop(),
                       child: const Text('شماره موبایل اشتباه است؟ ویرایش',
                           style: TextStyle(color: kGold)),
                     ),
@@ -2218,16 +2871,9 @@ class _SignupOtpPageState extends State<SignupOtpPage> {
                           SizedBox(
                             width: double.infinity,
                             child: OutlinedButton(
-                              onPressed: _resendSms,
-                              child: const Text('ارسال دوباره کد با پیامک'),
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          SizedBox(
-                            width: double.infinity,
-                            child: OutlinedButton(
-                              onPressed: _resendCall,
-                              child: const Text('ارسال دوباره کد با تماس تلفنی'),
+                              onPressed: _resending ? null : _resend,
+                              child: Text(
+                                  _resending ? 'در حال ارسال...' : 'ارسال دوباره کد'),
                             ),
                           ),
                         ],
@@ -2238,11 +2884,9 @@ class _SignupOtpPageState extends State<SignupOtpPage> {
                       height: 52,
                       child: FilledButton(
                         style: FilledButton.styleFrom(
-                          backgroundColor: kGold,
-                          foregroundColor: Colors.white,
-                        ),
-                        onPressed: _verify,
-                        child: const Text('تایید و ادامه'),
+                            backgroundColor: kGold, foregroundColor: Colors.white),
+                        onPressed: _verifying ? null : _verify,
+                        child: Text(_verifying ? 'در حال تایید...' : 'تایید و ادامه'),
                       ),
                     ),
                   ],
@@ -2276,12 +2920,15 @@ class _ProfileNamePageState extends State<ProfileNamePage> {
 
   Future<void> _finish() async {
     if (!_formKey.currentState!.validate()) return;
+
+    // ✅ acceptedTermsAtLeastOnce = true
     final p = Profile(
       phone: widget.phone,
       fullName: _nameCtrl.text.trim(),
       acceptedTermsAtLeastOnce: true,
     );
     await _Prefs.saveProfile(p);
+
     if (!mounted) return;
     Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute(builder: (_) => MainShell(profile: p)),
@@ -2308,8 +2955,7 @@ class _ProfileNamePageState extends State<ProfileNamePage> {
                       children: [
                         Text('شماره: ${_toPersianDigits(widget.phone)}',
                             style: const TextStyle(
-                                fontWeight: FontWeight.w900,
-                                color: kTextPrimary)),
+                                fontWeight: FontWeight.w900, color: kTextPrimary)),
                         const SizedBox(height: 12),
                         TextFormField(
                           controller: _nameCtrl,
@@ -2386,8 +3032,7 @@ class TermsReadOnlyPage extends StatelessWidget {
 class ChatStandalonePage extends StatelessWidget {
   final Profile profile;
   final String orderNo;
-  const ChatStandalonePage(
-      {super.key, required this.profile, required this.orderNo});
+  const ChatStandalonePage({super.key, required this.profile, required this.orderNo});
 
   @override
   Widget build(BuildContext context) {
@@ -2607,12 +3252,11 @@ class _ChatCoreState extends State<ChatCore> {
                 const Icon(Icons.info_outline, color: kTextPrimary, size: 18),
                 const SizedBox(width: 8),
                 Expanded(
-                    child: Text(_error!,
-                        style: const TextStyle(color: kTextPrimary))),
+                    child:
+                    Text(_error!, style: const TextStyle(color: kTextPrimary))),
                 TextButton(
                     onPressed: _load,
-                    child:
-                    const Text('Refresh', style: TextStyle(color: kGold))),
+                    child: const Text('Refresh', style: TextStyle(color: kGold))),
               ],
             ),
           ),
@@ -2625,8 +3269,7 @@ class _ChatCoreState extends State<ChatCore> {
                 .map((q) => Padding(
               padding: const EdgeInsets.symmetric(horizontal: 6),
               child: ActionChip(
-                label: Text(q,
-                    style: const TextStyle(color: kTextPrimary)),
+                label: Text(q, style: const TextStyle(color: kTextPrimary)),
                 backgroundColor: kAccentSoft,
                 side: const BorderSide(color: kBorder),
                 onPressed: () => _send(q),
@@ -2649,8 +3292,7 @@ class _ChatCoreState extends State<ChatCore> {
                 alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
                 child: Container(
                   margin: const EdgeInsets.symmetric(vertical: 6),
-                  padding:
-                  const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                   constraints: const BoxConstraints(maxWidth: 320),
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(14),
@@ -2668,8 +3310,7 @@ class _ChatCoreState extends State<ChatCore> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(m.text,
-                          style: const TextStyle(
-                              height: 1.5, color: kTextPrimary)),
+                          style: const TextStyle(height: 1.5, color: kTextPrimary)),
                       const SizedBox(height: 6),
                       Text(
                         _toPersianDigits(_formatJalaliDateTime(m.createdAt)),
@@ -2931,23 +3572,56 @@ Future<void> testSupabaseConnection(BuildContext context) async {
 
 /* ============================== Helpers ============================== */
 
-String _stageLabel(RepairStage s) {
+String _stageFaFromCode(String stage) {
+  final s = stage.trim().toLowerCase();
   switch (s) {
-    case RepairStage.received:
+    case 'received':
       return 'ثبت سفارش';
-    case RepairStage.atShop:
+    case 'at_shop':
       return 'ورود به دفتر';
-    case RepairStage.diagnosing:
+    case 'diagnosing':
       return 'بررسی ایراد';
-    case RepairStage.priceQuoted:
+    case 'price_quoted':
       return 'اعلام هزینه';
-    case RepairStage.repairing:
+    case 'repairing':
       return 'در حال تعمیر';
-    case RepairStage.ready:
+    case 'ready':
       return 'آماده تحویل';
-    case RepairStage.delivered:
+    case 'delivered':
       return 'تحویل شد';
+    default:
+      return stage;
   }
+}
+
+String _priceApprovalFaFromCode(String raw) {
+  final s = raw.trim().toLowerCase();
+  switch (s) {
+    case 'not_needed':
+      return 'نیاز ندارد';
+    case 'pending':
+      return 'در انتظار تایید';
+    case 'approved':
+      return 'تایید شد';
+    case 'rejected':
+      return 'رد شد';
+    default:
+      return raw;
+  }
+}
+
+String _formatToman(int amount) {
+  final s = amount.toString();
+  final buf = StringBuffer();
+  for (int i = 0; i < s.length; i++) {
+    final idxFromEnd = s.length - i;
+    buf.write(s[i]);
+    final isLast = i == s.length - 1;
+    if (!isLast && idxFromEnd % 3 == 1) {
+      buf.write('٬');
+    }
+  }
+  return buf.toString();
 }
 
 String _yyMMdd(DateTime d) {
