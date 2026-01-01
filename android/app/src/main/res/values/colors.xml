@@ -1,8 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <!-- Launcher icon background (used by adaptive icon xml) -->
-    <color name="ic_launcher_background">#1F5EFF</color>
-
-    <!-- Splash / launch background (used by launch theme) -->
-    <color name="launch_background">#1F5EFF</color>
-</resources>
