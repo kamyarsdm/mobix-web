@@ -1,0 +1,39 @@
+name: mobix_customer
+description: Mobix Customer App
+
+environment:
+  sdk: ">=3.3.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  supabase_flutter: ^2.12.0
+  shared_preferences: ^2.3.2
+  url_launcher: ^6.3.1
+
+dev_dependencies:
+  flutter_launcher_icons: ^0.13.1
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+
+  # Android
+  adaptive_icon_background: "#2B1B4E"
+  adaptive_icon_foreground: "assets/app_icon_ios.png"
+
+  # iOS (1024x1024 – بدون شفافیت)
+  image_path: "assets/app_icon_ios.png"
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/mobix_logo.png
+    - assets/app_icon_ios.png
+    - assets/stories/
+    - assets/banners/
+    - assets/banners/banner_1.png
+    - assets/banners/banner_2.png
+    - assets/banners/banner_4.png
